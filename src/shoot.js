@@ -46,7 +46,7 @@ const BURST_PALETTE = [0xf7931a, 0xb14bff, 0x00e5ff, 0xffd700] // orange, magent
 // window (never on misses, never in free play). A jagged main bolt from the shot
 // origin to the hit point plus a few forks, additive electric blue/white, brief.
 // One LineSegments draw call per bolt; capped so rapid hits stay cheap on Quest.
-const BOLT_LIFETIME = 2.0;  // TEMP (verify): real value 0.16 — bumped so a bolt lingers for screenshot
+const BOLT_LIFETIME = 0.16;  // seconds — flashes and fades fast (crackling zap)
 const BOLT_MAX      = 12;    // hard cap on simultaneous bolts
 const BOLT_SEGMENTS = 10;    // jaggedness of the main bolt
 const BOLT_JITTER   = 0.07;  // sideways jitter as a fraction of bolt length
