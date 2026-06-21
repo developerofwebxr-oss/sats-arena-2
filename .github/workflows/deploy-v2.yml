@@ -1,0 +1,57 @@
+name: Deploy to GitHub Pages (V2 LIVE)
+
+# Build and deploy the sats-arena-2 (v2) LIVE site whenever main is updated.
+# Guarded to the sats-arena-2 repo so this file — which also exists in the testing
+# repo (shared v3 history) and could exist anywhere this branch is pushed — only
+# ever deploys from sats-arena-2. v2 is the evolved version (GLB gun, lights,
+# muzzle flash); the old sats-arena repo is frozen and never deployed to again.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: # allow manual runs from the Actions tab
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    # Only the sats-arena-2 repo actually builds/deploys this.
+    if: github.repository == 'developerofwebxr-oss/sats-arena-2'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+      - run: npm run build # base overridden for the sats-arena-2 path
+        env:
+          BASE_PATH: "/sats-arena-2/"
+          VITE_LIGHTNING: "on"
+          # v2 SHARES the v1/testing Railway backend + LNbits wallet for now;
+          # separate instances will be set up before v2 goes public-live.
+          VITE_BACKEND_URL: "https://sats-arena-production.up.railway.app"
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    if: github.repository == 'developerofwebxr-oss/sats-arena-2'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
