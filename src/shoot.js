@@ -48,9 +48,14 @@ const BURST_PALETTE = [0xf7931a, 0xb14bff, 0x00e5ff, 0xffd700] // orange, magent
 // One LineSegments draw call per bolt; capped so rapid hits stay cheap on Quest.
 const BOLT_LIFETIME = 0.16;  // seconds — flashes and fades fast (crackling zap)
 const BOLT_MAX      = 12;    // hard cap on simultaneous bolts
-const BOLT_SEGMENTS = 10;    // jaggedness of the main bolt
-const BOLT_JITTER   = 0.07;  // sideways jitter as a fraction of bolt length
+const BOLT_SEGMENTS = 12;    // jaggedness of the main bolt
+const BOLT_JITTER   = 0.11;  // sideways jitter as a fraction of bolt length (irregularity)
 const BOLT_COLOR    = 0xc4e2ff; // electric blue-white (additive → reads white-hot)
+// Thickness is faked by drawing each path as several jittered "strands" (real
+// GL line width is ignored on Quest/ANGLE). More strands + wider spread = thicker
+// and more chaotic. THICK is the world-space fuzz radius of a strand bundle.
+const BOLT_CORE_STRANDS = 6;    // main bolt thickness
+const BOLT_CORE_THICK   = 0.018;// metres of fuzz spread for the main bundle
 // Flat/mobile gun muzzle in camera space (≈ the on-screen gun barrel tip). Used
 // as the lightning origin so the bolt is seen from the side, not end-on.
 const MUZZLE_OFFSET = new THREE.Vector3(0.18, -0.16, -0.5);
@@ -363,43 +368,60 @@ function buildBoltSegments(start, end) {
   u.normalize();
   const w = new THREE.Vector3().crossVectors(dir, u).normalize();
 
-  const amp = len * BOLT_JITTER;
-  const lerp = new THREE.Vector3();
-
-  // Main jagged path: jitter peaks mid-bolt (sin), so the ends stay anchored.
-  const main = [start.clone()];
-  for (let i = 1; i < BOLT_SEGMENTS; i++) {
-    const t = i / BOLT_SEGMENTS;
-    const s = Math.sin(Math.PI * t);
-    const p = lerp.copy(start).addScaledVector(dir, len * t).clone();
-    p.addScaledVector(u, (Math.random() - 0.5) * amp * 2 * s);
-    p.addScaledVector(w, (Math.random() - 0.5) * amp * 2 * s);
-    main.push(p);
-  }
-  main.push(end.clone());
-
   const segs = [];
   const push = (a, b) => segs.push(a.x, a.y, a.z, b.x, b.y, b.z);
-  for (let i = 0; i < main.length - 1; i++) push(main[i], main[i + 1]);
 
-  // A few forking branches off interior points, angling away then jittering.
-  const forks = 2 + (Math.random() * 2 | 0); // 2–3
+  // A jagged polyline from A→B; jitter peaks mid-span (sin) so the ends anchor.
+  function jaggedPath(A, B, steps, amp) {
+    const span = B.clone().sub(A);
+    const pts = [A.clone()];
+    for (let i = 1; i < steps; i++) {
+      const t = i / steps;
+      const s = Math.sin(Math.PI * t);
+      const p = A.clone().addScaledVector(span, t);
+      p.addScaledVector(u, (Math.random() - 0.5) * amp * 2 * s);
+      p.addScaledVector(w, (Math.random() - 0.5) * amp * 2 * s);
+      pts.push(p);
+    }
+    pts.push(B.clone());
+    return pts;
+  }
+
+  // Draw a polyline as several fuzzy offset copies → fakes thickness + chaos.
+  function emitStranded(pts, strands, thick) {
+    for (let s = 0; s < strands; s++) {
+      let prev = null;
+      for (let i = 0; i < pts.length; i++) {
+        const o = pts[i].clone()
+          .addScaledVector(u, (Math.random() - 0.5) * thick)
+          .addScaledVector(w, (Math.random() - 0.5) * thick);
+        if (prev) push(prev, o);
+        prev = o;
+      }
+    }
+  }
+
+  const amp = len * BOLT_JITTER;
+
+  // Main bolt — a thick, chaotic bundle.
+  const main = jaggedPath(start, end, BOLT_SEGMENTS, amp);
+  emitStranded(main, BOLT_CORE_STRANDS, len * BOLT_CORE_THICK);
+
+  // Forking branches off interior points. The first couple are noticeably THICKER
+  // and more chaotic; the rest are thin wispy tendrils.
+  const forks = 3 + (Math.random() * 2 | 0); // 3–4
   for (let f = 0; f < forks; f++) {
     const idx = 2 + (Math.random() * (main.length - 4) | 0);
-    let p = main[idx].clone();
-    const bdir = dir.clone().multiplyScalar(0.4)
-      .addScaledVector(u, (Math.random() - 0.5) * 1.6)
-      .addScaledVector(w, (Math.random() - 0.5) * 1.6)
+    const p = main[idx];
+    const bdir = dir.clone().multiplyScalar(0.3)
+      .addScaledVector(u, (Math.random() - 0.5) * 2.2)
+      .addScaledVector(w, (Math.random() - 0.5) * 2.2)
       .normalize();
-    const blen = len * (0.12 + Math.random() * 0.18);
-    const steps = 3;
-    for (let s = 0; s < steps; s++) {
-      const next = p.clone().addScaledVector(bdir, blen / steps);
-      next.addScaledVector(u, (Math.random() - 0.5) * amp);
-      next.addScaledVector(w, (Math.random() - 0.5) * amp);
-      push(p, next);
-      p = next;
-    }
+    const blen = len * (0.14 + Math.random() * 0.26);
+    const bend = p.clone().addScaledVector(bdir, blen);
+    const bpts = jaggedPath(p, bend, 3 + (Math.random() * 2 | 0), amp * 0.9);
+    const thick = f < 2;
+    emitStranded(bpts, thick ? 4 : 2, len * (thick ? 0.012 : 0.005));
   }
 
   return new Float32Array(segs);

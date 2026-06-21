@@ -64,7 +64,11 @@ const MIRROR_LEFT = true;
 // sits LOW within the group (rising from the bottom edge).
 const MODEL_SCALE = 0.50;
 const MODEL_POS   = new THREE.Vector3(0, -0.26, 0);
-const MODEL_EULER = new THREE.Euler(0, Math.PI / 2, 0);
+const MODEL_EULER = new THREE.Euler(0, Math.PI / 2, 0); // flat/camera gun (correct as-is)
+// Controller guns need an extra ~180° YAW vs. the camera gun: on the Quest the
+// barrel was facing back at the player with the trigger on the far side. Only the
+// yaw changes — pitch/roll stay 0 so up/down orientation is preserved.
+const VR_MODEL_EULER = new THREE.Euler(0, Math.PI / 2 + Math.PI, 0);
 
 // Muzzle-flash placement at the barrel tip + its size. Tune to the model's muzzle.
 const FLASH_POS  = new THREE.Vector3(0, -0.10, -0.36);
@@ -89,7 +93,8 @@ export function setupWeapon(camera, renderer) {
   const muzzleTexture = createMuzzleTexture();
 
   // ── A self-contained gun: group + muzzle flash + lights + (async) model ──────
-  function buildGunUnit() {
+  // modelEuler lets controller guns use a different yaw than the camera gun.
+  function buildGunUnit(modelEuler = MODEL_EULER) {
     const group = new THREE.Group();
 
     // Muzzle flash — OWN SpriteMaterial so each gun flashes independently
@@ -125,7 +130,7 @@ export function setupWeapon(camera, renderer) {
     function applyTransform() {
       if (!model) return;
       model.position.copy(MODEL_POS);
-      model.rotation.copy(MODEL_EULER);
+      model.rotation.copy(modelEuler);
       // Negative X mirrors the gun left↔right for the left hand.
       model.scale.set(mirror ? -MODEL_SCALE : MODEL_SCALE, MODEL_SCALE, MODEL_SCALE);
     }
@@ -160,8 +165,8 @@ export function setupWeapon(camera, renderer) {
   }
 
   // One camera gun (flat/mobile) + two controller guns (VR/AR headset).
-  const cameraGun = buildGunUnit();
-  const controllerGuns = [buildGunUnit(), buildGunUnit()];
+  const cameraGun = buildGunUnit(MODEL_EULER);
+  const controllerGuns = [buildGunUnit(VR_MODEL_EULER), buildGunUnit(VR_MODEL_EULER)];
 
   // ── Load the GLB once, clone into every gun ──────────────────────────────────
   console.log('[gun] loading GLB from', gunModelUrl);
