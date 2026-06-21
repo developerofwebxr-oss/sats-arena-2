@@ -36,7 +36,7 @@ const { onShoot, shootFromRay, updateBursts } = setupShooter(camera, scene, weap
 //   shootFromRay        — controller/handheld trigger → hit logic
 //   vrui.handleControllerSelect — VR controller pointing at the ACTIVATE panel
 //                                 activates a charge instead of firing
-const { updateControllers } = setupXR(renderer, scene, shootFromRay, vrui.handleControllerSelect);
+const { updateControllers } = setupXR(renderer, scene, shootFromRay, vrui.handleControllerSelect, weapon.flashController);
 
 // Walls + ceiling ring go into the environment group (with the radar floor) so
 // AR mode can hide the whole fake world at once.
