@@ -51,12 +51,16 @@ const BOLT_MAX      = 12;    // hard cap on simultaneous bolts
 const BOLT_SEGMENTS = 10;    // jaggedness of the main bolt
 const BOLT_JITTER   = 0.07;  // sideways jitter as a fraction of bolt length
 const BOLT_COLOR    = 0xc4e2ff; // electric blue-white (additive → reads white-hot)
+// Flat/mobile gun muzzle in camera space (≈ the on-screen gun barrel tip). Used
+// as the lightning origin so the bolt is seen from the side, not end-on.
+const MUZZLE_OFFSET = new THREE.Vector3(0.18, -0.16, -0.5);
 
 // onFire — optional callback invoked on every shot fired (hit or miss),
 // e.g. to trigger the weapon muzzle flash.
 export function setupShooter(camera, scene, onFire) {
   const raycaster = new THREE.Raycaster();
   const _ndc = new THREE.Vector2(); // reused for camera-space aiming
+  const _camPos = new THREE.Vector3(); // reused: camera world position for the muzzle
 
   // Active burst objects — each has { points, velocities, age }.
   // Kept small; bursts expire in ~0.35s so rarely more than 2–3 alive at once.
@@ -104,39 +108,47 @@ export function setupShooter(camera, scene, onFire) {
   function onShoot(ndcX, ndcY) {
     // setupRay aims the raycaster from the camera through the NDC point.
     // Captured in a closure so rapid-fire bursts re-aim the same way each shot.
-    triggerFire(() => raycaster.setFromCamera(_ndc.set(ndcX, ndcY), camera));
+    // muzzleOrigin = null → doShot derives the flat/mobile gun muzzle from the camera.
+    triggerFire(() => raycaster.setFromCamera(_ndc.set(ndcX, ndcY), camera), null);
   }
 
   // ── shootFromRay ───────────────────────────────────────────────────────────
   // Called by xr.js for Quest controller triggers and handheld screen taps.
-  // origin/direction are world-space, captured at trigger time.
+  // origin/direction are world-space, captured at trigger time. The controller
+  // origin IS the gun muzzle, so pass it through as the lightning bolt's start.
   function shootFromRay(origin, direction) {
-    triggerFire(() => raycaster.set(origin, direction));
+    const muzzle = origin.clone();
+    triggerFire(() => raycaster.set(origin, direction), muzzle);
   }
 
   // ── triggerFire ──────────────────────────────────────────────────────────
   // One trigger event → one shot, OR a quick burst when rapid-fire is active.
   // setupRay() configures the raycaster for this trigger's aim; it's reused for
-  // every shot in the burst so they all follow the same line.
-  function triggerFire(setupRay) {
-    doShot(setupRay); // first shot fires immediately
+  // every shot in the burst so they all follow the same line. muzzleOrigin (or
+  // null for flat) is the lightning bolt's start point.
+  function triggerFire(setupRay, muzzleOrigin) {
+    doShot(setupRay, muzzleOrigin); // first shot fires immediately
 
     if (isRapidFire()) {
       // Schedule the remaining burst shots a few ms apart for a rifle feel.
       for (let i = 1; i < RAPID_BURST; i++) {
-        setTimeout(() => doShot(setupRay), i * RAPID_INTERVAL_MS);
+        setTimeout(() => doShot(setupRay, muzzleOrigin), i * RAPID_INTERVAL_MS);
       }
     }
   }
 
   // ── doShot ───────────────────────────────────────────────────────────────
   // Fire a single shot: aim, flash, raycast, resolve hit/miss. Free — no cost.
-  function doShot(setupRay) {
+  function doShot(setupRay, muzzleOrigin) {
     setupRay();
 
-    // Shot start point (camera in flat, controller in VR/AR) — used as the
-    // lightning bolt's origin so it travels along the actual shot path.
-    const shotOrigin = raycaster.ray.origin.clone();
+    // Lightning bolt start = the GUN MUZZLE (not the eye). For controller shots
+    // muzzleOrigin is the controller pose. For flat/mobile it's null, so derive
+    // the on-screen gun's muzzle as a down-right offset from the camera — this
+    // keeps the bolt off the view axis so it isn't foreshortened to nothing.
+    const boltStart = muzzleOrigin
+      ? muzzleOrigin
+      : MUZZLE_OFFSET.clone().applyQuaternion(camera.quaternion).add(camera.getWorldPosition(_camPos));
 
     // Announce the shot (muzzle flash etc.) — fires for both hits and misses.
     if (onFire) onFire();
@@ -171,7 +183,7 @@ export function setupShooter(camera, scene, onFire) {
       }
       // PAID rapid-fire only: a lightning zap along the shot path to the coin.
       // Hits only (we're inside `if (hit)`), so misses never spawn a bolt.
-      if (isRapidFire()) spawnLightning(shotOrigin, hit.point);
+      if (isRapidFire()) spawnLightning(boltStart, hit.point);
     } else {
       recordMiss();
       playMissSound();
