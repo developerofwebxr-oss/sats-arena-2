@@ -139,6 +139,7 @@ function buildController(index, renderer, scene, shootFromRay, onControllerSelec
     const src = event.data || state.inputSource;
     const mode = src && src.targetRayMode;
     console.log('[xr] select targetRayMode =', mode); // debug: identify Cardboard/Quest/phone input
+    window.__lastSelectMode = mode || 'unknown'; // surfaced on the in-VR debug readout
 
     // Head-aimed input: handheld phone AR ('screen' tap) OR Cardboard ('gaze'
     // button). Both fire straight out of the XR camera = the centre crosshair,

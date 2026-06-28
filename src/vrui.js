@@ -24,10 +24,14 @@ const TIMER_OFFSET = new THREE.Vector3(0,   0.38, -2.0); // COUNTDOWN (just belo
 const SCORE_WIDTH  = 0.60; // metres wide
 const TIMER_WIDTH  = 0.46;
 
-// Gaze crosshair (Cardboard only). Head-locked dead-centre so the player aims
-// with their head; a tap/Cardboard-button fires straight ahead through it.
-const RETICLE_OFFSET = new THREE.Vector3(0, 0, -2.0); // centre of view, 2m out
-const RETICLE_WIDTH  = 0.10; // metres at that distance
+// Gaze crosshair for WebXR VR (phone/Cardboard). Attached as a CAMERA CHILD (like
+// the gun, which is confirmed to render in both eyes) so it reliably appears in
+// the stereo view, dead-centre, aiming with head/device movement.
+const RETICLE_POS   = new THREE.Vector3(0, 0, -2.0); // centre of view, 2m ahead
+const RETICLE_WIDTH = 0.16; // metres at that distance
+// On-screen VR debug readout (camera child, upper-centre).
+const VRDEBUG_POS   = new THREE.Vector3(0, 0.55, -2.0);
+const VRDEBUG_WIDTH = 1.3;
 
 export function setupVrUI(scene, camera, renderer) {
   // ── ACTIVATE panel ──────────────────────────────────────────────────────
@@ -45,7 +49,7 @@ export function setupVrUI(scene, camera, renderer) {
   timerSprite.mesh.visible = false;
   scene.add(scoreSprite.mesh, timerSprite.mesh);
 
-  // ── Gaze crosshair (Cardboard only) ─────────────────────────────────────────
+  // ── Gaze crosshair — CAMERA CHILD so it renders in both stereo eyes ──────────
   // Additive cyan reticle, drawn on top (depthTest off) so it's always visible.
   const reticle = new THREE.Mesh(
     new THREE.PlaneGeometry(RETICLE_WIDTH, RETICLE_WIDTH),
@@ -57,9 +61,16 @@ export function setupVrUI(scene, camera, renderer) {
       blending: THREE.AdditiveBlending,
     }),
   );
+  reticle.position.copy(RETICLE_POS);
   reticle.renderOrder = 999; // draw last so it sits over coins
   reticle.visible = false;
-  scene.add(reticle);
+  camera.add(reticle);
+
+  // ── On-screen VR debug readout — also a CAMERA CHILD (guaranteed visible) ────
+  const vrDebug = createDebugSprite(VRDEBUG_WIDTH);
+  vrDebug.mesh.position.copy(VRDEBUG_POS);
+  vrDebug.mesh.visible = false;
+  camera.add(vrDebug.mesh);
 
   const raycaster = new THREE.Raycaster();
   const _camPos  = new THREE.Vector3();
@@ -82,6 +93,7 @@ export function setupVrUI(scene, camera, renderer) {
       scoreSprite.mesh.visible = false;
       timerSprite.mesh.visible = false;
       reticle.visible = false;
+      vrDebug.mesh.visible = false;
       return;
     }
 
@@ -91,8 +103,26 @@ export function setupVrUI(scene, camera, renderer) {
     panel.visible = !rapid && getAvailableCharges() > 0;
     scoreSprite.mesh.visible = true;     // always in-session
     timerSprite.mesh.visible = rapid;    // only during rapid-fire
-    const gaze = isGazeVR();             // Cardboard: head-aim crosshair
-    reticle.visible = gaze;
+
+    // ── Gaze crosshair + debug (WebXR VR only; not AR) ──────────────────────────
+    // Loosened: show in ANY immersive VR (opaque) session — this reliably covers
+    // the Android phone/Cardboard stereo view. (Quest is opaque too, so the reticle
+    // now also shows there; once the debug readout confirms the Android input type
+    // we can precisely re-exclude Quest.)
+    const session = renderer.xr.getSession();
+    const blend   = session && session.environmentBlendMode;
+    const isAR    = !!(blend && blend !== 'opaque');
+    const inputs  = session ? [...(session.inputSources || [])].map((s) => s.targetRayMode).join(',') : '';
+    reticle.visible = !isAR;
+    vrDebug.mesh.visible = true;
+    vrDebug.setText([
+      'VR DEBUG',
+      'present: yes',
+      'blend: ' + (blend || '(none)'),
+      'inputs: ' + (inputs || 'none'),
+      'reticle: ' + (reticle.visible ? 'ON' : 'off'),
+      'lastSelect: ' + (window.__lastSelectMode || '-'),
+    ].join('\n'));
 
     // Text — repaint only when the value changes (cheap; protects 72fps).
     scoreSprite.setText(`SCORE ${getScore()}`);
@@ -105,22 +135,11 @@ export function setupVrUI(scene, camera, renderer) {
     const cam = renderer.xr.getCamera();
     cam.getWorldPosition(_camPos);
     cam.getWorldQuaternion(_camQuat);
+    // Reticle + debug are CAMERA CHILDREN — they track the head automatically, no
+    // head-lock math needed. (panel/score/timer remain scene objects, head-locked.)
     if (panel.visible)            headLock(panel, PANEL_OFFSET);
     headLock(scoreSprite.mesh, SCORE_OFFSET);
     if (timerSprite.mesh.visible) headLock(timerSprite.mesh, TIMER_OFFSET);
-    if (reticle.visible)          headLock(reticle, RETICLE_OFFSET);
-  }
-
-  // True only in a Cardboard-style session: immersive VR (opaque, not AR) with NO
-  // tracked controllers — i.e. not Quest. That's where head-gaze aiming applies.
-  function isGazeVR() {
-    const s = renderer.xr.getSession();
-    if (!s) return false;
-    if (s.environmentBlendMode && s.environmentBlendMode !== 'opaque') return false; // AR
-    for (const src of (s.inputSources || [])) {
-      if (src.targetRayMode === 'tracked-pointer') return false; // Quest controllers
-    }
-    return true;
   }
 
   function handleControllerSelect(origin, direction) {
@@ -180,6 +199,38 @@ function createTextSprite(worldWidth, color) {
     tex.needsUpdate = true; // upload only on change
   }
 
+  return { mesh, setText };
+}
+
+// Multi-line debug readout sprite (camera child). Left-aligned cyan text on a
+// dark panel; repaints only when the text changes.
+function createDebugSprite(worldWidth) {
+  const W = 512, H = 320;
+  const canvas = document.createElement('canvas');
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext('2d');
+  const tex = new THREE.CanvasTexture(canvas);
+  const mesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(worldWidth, worldWidth * (H / W)),
+    new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthTest: false, depthWrite: false }),
+  );
+  mesh.renderOrder = 1000;
+
+  let last = null;
+  function setText(str) {
+    if (str === last) return;
+    last = str;
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#00e5ff';
+    ctx.font = 'bold 30px monospace';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    str.split('\n').forEach((line, i) => ctx.fillText(line, 14, 14 + i * 38));
+    tex.needsUpdate = true;
+  }
   return { mesh, setText };
 }
 
