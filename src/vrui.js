@@ -24,6 +24,11 @@ const TIMER_OFFSET = new THREE.Vector3(0,   0.38, -2.0); // COUNTDOWN (just belo
 const SCORE_WIDTH  = 0.60; // metres wide
 const TIMER_WIDTH  = 0.46;
 
+// Gaze crosshair (Cardboard only). Head-locked dead-centre so the player aims
+// with their head; a tap/Cardboard-button fires straight ahead through it.
+const RETICLE_OFFSET = new THREE.Vector3(0, 0, -2.0); // centre of view, 2m out
+const RETICLE_WIDTH  = 0.10; // metres at that distance
+
 export function setupVrUI(scene, camera, renderer) {
   // ── ACTIVATE panel ──────────────────────────────────────────────────────
   const panel = new THREE.Mesh(
@@ -39,6 +44,22 @@ export function setupVrUI(scene, camera, renderer) {
   scoreSprite.mesh.visible = false;
   timerSprite.mesh.visible = false;
   scene.add(scoreSprite.mesh, timerSprite.mesh);
+
+  // ── Gaze crosshair (Cardboard only) ─────────────────────────────────────────
+  // Additive cyan reticle, drawn on top (depthTest off) so it's always visible.
+  const reticle = new THREE.Mesh(
+    new THREE.PlaneGeometry(RETICLE_WIDTH, RETICLE_WIDTH),
+    new THREE.MeshBasicMaterial({
+      map: makeReticleTexture(),
+      transparent: true,
+      depthTest: false,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    }),
+  );
+  reticle.renderOrder = 999; // draw last so it sits over coins
+  reticle.visible = false;
+  scene.add(reticle);
 
   const raycaster = new THREE.Raycaster();
   const _camPos  = new THREE.Vector3();
@@ -60,6 +81,7 @@ export function setupVrUI(scene, camera, renderer) {
       panel.visible = false;
       scoreSprite.mesh.visible = false;
       timerSprite.mesh.visible = false;
+      reticle.visible = false;
       return;
     }
 
@@ -69,6 +91,8 @@ export function setupVrUI(scene, camera, renderer) {
     panel.visible = !rapid && getAvailableCharges() > 0;
     scoreSprite.mesh.visible = true;     // always in-session
     timerSprite.mesh.visible = rapid;    // only during rapid-fire
+    const gaze = isGazeVR();             // Cardboard: head-aim crosshair
+    reticle.visible = gaze;
 
     // Text — repaint only when the value changes (cheap; protects 72fps).
     scoreSprite.setText(`SCORE ${getScore()}`);
@@ -84,6 +108,19 @@ export function setupVrUI(scene, camera, renderer) {
     if (panel.visible)            headLock(panel, PANEL_OFFSET);
     headLock(scoreSprite.mesh, SCORE_OFFSET);
     if (timerSprite.mesh.visible) headLock(timerSprite.mesh, TIMER_OFFSET);
+    if (reticle.visible)          headLock(reticle, RETICLE_OFFSET);
+  }
+
+  // True only in a Cardboard-style session: immersive VR (opaque, not AR) with NO
+  // tracked controllers — i.e. not Quest. That's where head-gaze aiming applies.
+  function isGazeVR() {
+    const s = renderer.xr.getSession();
+    if (!s) return false;
+    if (s.environmentBlendMode && s.environmentBlendMode !== 'opaque') return false; // AR
+    for (const src of (s.inputSources || [])) {
+      if (src.targetRayMode === 'tracked-pointer') return false; // Quest controllers
+    }
+    return true;
   }
 
   function handleControllerSelect(origin, direction) {
@@ -144,6 +181,48 @@ function createTextSprite(worldWidth, color) {
   }
 
   return { mesh, setText };
+}
+
+// Gaze reticle texture: a glowing cyan ring with a centre dot and four tick
+// marks, on transparent. Additive on the mesh → reads as a bright crosshair.
+function makeReticleTexture() {
+  const S = 128;
+  const canvas = document.createElement('canvas');
+  canvas.width = S;
+  canvas.height = S;
+  const ctx = canvas.getContext('2d');
+  const c = S / 2;
+  ctx.clearRect(0, 0, S, S);
+  ctx.strokeStyle = '#00e5ff';
+  ctx.fillStyle = '#00e5ff';
+  ctx.shadowColor = '#00e5ff';
+  ctx.shadowBlur = 10;
+
+  // Ring.
+  ctx.lineWidth = 6;
+  ctx.beginPath();
+  ctx.arc(c, c, S * 0.30, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // Centre dot.
+  ctx.beginPath();
+  ctx.arc(c, c, S * 0.05, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Four tick marks (up/down/left/right).
+  ctx.lineWidth = 5;
+  const inner = S * 0.34, outer = S * 0.46;
+  const ticks = [[0, -1], [0, 1], [-1, 0], [1, 0]];
+  for (const [dx, dy] of ticks) {
+    ctx.beginPath();
+    ctx.moveTo(c + dx * inner, c + dy * inner);
+    ctx.lineTo(c + dx * outer, c + dy * outer);
+    ctx.stroke();
+  }
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.needsUpdate = true;
+  return tex;
 }
 
 // Canvas-texture label for the ACTIVATE panel. Magenta on dark, on-brand.

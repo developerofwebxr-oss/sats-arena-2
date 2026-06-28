@@ -137,14 +137,25 @@ function buildController(index, renderer, scene, shootFromRay, onControllerSelec
     // 'selectstart' can race — depending on state.inputSource/connected.value
     // there intermittently dropped taps. event.data is always present here.
     const src = event.data || state.inputSource;
-    const isScreen = src && src.targetRayMode === 'screen';
+    const mode = src && src.targetRayMode;
+    console.log('[xr] select targetRayMode =', mode); // debug: identify Cardboard/Quest/phone input
 
-    if (isScreen) {
-      // Handheld: fire straight out of the phone (XR camera forward) = crosshair.
-      // No connected/inputSource gate, so a tap is never swallowed by the race.
+    // Head-aimed input: handheld phone AR ('screen' tap) OR Cardboard ('gaze'
+    // button). Both fire straight out of the XR camera = the centre crosshair,
+    // aimed by head direction. (Quest uses the tracked-controller branch below.)
+    const headAimed = mode === 'screen' || mode === 'gaze';
+
+    if (headAimed) {
+      // Fire from the XR camera forward (crosshair). No connected/inputSource gate,
+      // so a tap/gaze-press is never swallowed by a connect race.
       const xrCam = renderer.xr.getCamera();
       _origin.setFromMatrixPosition(xrCam.matrixWorld);
       _direction.set(0, 0, -1).transformDirection(xrCam.matrixWorld).normalize();
+
+      // Cardboard only: let the head-aim ray operate the in-world ACTIVATE panel
+      // too (gaze at it + press fires the panel instead of a shot). Phone AR keeps
+      // its DOM ACTIVATE button, so we don't add the panel check for 'screen'.
+      if (mode === 'gaze' && onControllerSelect && onControllerSelect(_origin, _direction)) return;
     } else {
       // Tracked controller: fire from the controller pose (guard is correct here —
       // a controller connects once and stays connected).
