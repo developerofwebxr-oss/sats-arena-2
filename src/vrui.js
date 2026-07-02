@@ -29,9 +29,6 @@ const TIMER_WIDTH  = 0.46;
 // the stereo view, dead-centre, aiming with head/device movement.
 const RETICLE_POS   = new THREE.Vector3(0, 0, -2.0); // centre of view, 2m ahead
 const RETICLE_WIDTH = 0.16; // metres at that distance
-// On-screen VR debug readout (camera child, upper-centre).
-const VRDEBUG_POS   = new THREE.Vector3(0, 0.55, -2.0);
-const VRDEBUG_WIDTH = 1.3;
 
 export function setupVrUI(scene, camera, renderer) {
   // ── ACTIVATE panel ──────────────────────────────────────────────────────
@@ -66,12 +63,6 @@ export function setupVrUI(scene, camera, renderer) {
   reticle.visible = false;
   camera.add(reticle);
 
-  // ── On-screen VR debug readout — also a CAMERA CHILD (guaranteed visible) ────
-  const vrDebug = createDebugSprite(VRDEBUG_WIDTH);
-  vrDebug.mesh.position.copy(VRDEBUG_POS);
-  vrDebug.mesh.visible = false;
-  camera.add(vrDebug.mesh);
-
   const raycaster = new THREE.Raycaster();
   const _camPos  = new THREE.Vector3();
   const _camQuat = new THREE.Quaternion();
@@ -93,7 +84,6 @@ export function setupVrUI(scene, camera, renderer) {
       scoreSprite.mesh.visible = false;
       timerSprite.mesh.visible = false;
       reticle.visible = false;
-      vrDebug.mesh.visible = false;
       return;
     }
 
@@ -104,25 +94,13 @@ export function setupVrUI(scene, camera, renderer) {
     scoreSprite.mesh.visible = true;     // always in-session
     timerSprite.mesh.visible = rapid;    // only during rapid-fire
 
-    // ── Gaze crosshair + debug (WebXR VR only; not AR) ──────────────────────────
-    // Loosened: show in ANY immersive VR (opaque) session — this reliably covers
-    // the Android phone/Cardboard stereo view. (Quest is opaque too, so the reticle
-    // now also shows there; once the debug readout confirms the Android input type
-    // we can precisely re-exclude Quest.)
+    // ── Gaze crosshair (WebXR VR only; hidden in AR passthrough) ────────────────
+    // Shown in any immersive VR (opaque) session — covers the Android phone/
+    // Cardboard stereo view. (Quest is opaque too, so it shows there as well.)
     const session = renderer.xr.getSession();
     const blend   = session && session.environmentBlendMode;
     const isAR    = !!(blend && blend !== 'opaque');
-    const inputs  = session ? [...(session.inputSources || [])].map((s) => s.targetRayMode).join(',') : '';
     reticle.visible = !isAR;
-    vrDebug.mesh.visible = true;
-    vrDebug.setText([
-      'VR DEBUG',
-      'present: yes',
-      'blend: ' + (blend || '(none)'),
-      'inputs: ' + (inputs || 'none'),
-      'reticle: ' + (reticle.visible ? 'ON' : 'off'),
-      'lastSelect: ' + (window.__lastSelectMode || '-'),
-    ].join('\n'));
 
     // Text — repaint only when the value changes (cheap; protects 72fps).
     scoreSprite.setText(`SCORE ${getScore()}`);
@@ -199,38 +177,6 @@ function createTextSprite(worldWidth, color) {
     tex.needsUpdate = true; // upload only on change
   }
 
-  return { mesh, setText };
-}
-
-// Multi-line debug readout sprite (camera child). Left-aligned cyan text on a
-// dark panel; repaints only when the text changes.
-function createDebugSprite(worldWidth) {
-  const W = 512, H = 320;
-  const canvas = document.createElement('canvas');
-  canvas.width = W;
-  canvas.height = H;
-  const ctx = canvas.getContext('2d');
-  const tex = new THREE.CanvasTexture(canvas);
-  const mesh = new THREE.Mesh(
-    new THREE.PlaneGeometry(worldWidth, worldWidth * (H / W)),
-    new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthTest: false, depthWrite: false }),
-  );
-  mesh.renderOrder = 1000;
-
-  let last = null;
-  function setText(str) {
-    if (str === last) return;
-    last = str;
-    ctx.clearRect(0, 0, W, H);
-    ctx.fillStyle = 'rgba(0,0,0,0.6)';
-    ctx.fillRect(0, 0, W, H);
-    ctx.fillStyle = '#00e5ff';
-    ctx.font = 'bold 30px monospace';
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'top';
-    str.split('\n').forEach((line, i) => ctx.fillText(line, 14, 14 + i * 38));
-    tex.needsUpdate = true;
-  }
   return { mesh, setText };
 }
 
