@@ -11,7 +11,7 @@ import { setupWeapon } from './weapon.js';
 import { setupARMode } from './armode.js';
 import { setSpawnMode } from './targets.js';
 import { setupModeSwitcher } from './modeswitcher.js';
-import { updateUpgrade, grantRapidFire } from './upgrade.js';
+import { updateUpgrade } from './upgrade.js';
 import { setupLightning } from './lightning.js';
 import { setupVrUI } from './vrui.js';
 
@@ -66,10 +66,6 @@ setupInput(onShoot, renderer);
 //   mobile   → gyroscope (with iOS permission flow) or virtual joystick fallback
 //   Quest VR → no-op (WebXR head tracking takes over)
 const { updateMovement } = setupMovement(camera, renderer);
-
-// TEMP debug: trigger the paid rapid-fire window from the console for testing the
-// lightning effect on desktop (no payment here). Remove before promotion.
-window.__rapid = grantRapidFire;
 
 // ─── Clock ────────────────────────────────────────────────────────────────────
 const clock = new THREE.Clock();

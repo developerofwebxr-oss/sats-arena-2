@@ -138,7 +138,6 @@ function buildController(index, renderer, scene, shootFromRay, onControllerSelec
     // there intermittently dropped taps. event.data is always present here.
     const src = event.data || state.inputSource;
     const mode = src && src.targetRayMode;
-    console.log('[xr] select targetRayMode =', mode); // debug: identify Cardboard/Quest/phone input
 
     // Head-aimed input: handheld phone AR ('screen' tap) OR Cardboard ('gaze'
     // button). Both fire straight out of the XR camera = the centre crosshair,

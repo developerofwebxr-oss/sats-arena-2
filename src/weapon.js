@@ -37,12 +37,7 @@ const CAMERA_EULER = new THREE.Euler(0.05, -0.08, 0); // slight inward tilt
 const CAMERA_SCALE = 1.0;
 
 // Coarse pointer or a small min-dimension → treat as a phone for gun placement.
-// TEMP debug override (?gunmobile=1 / ?gundesktop=1) lets us verify each
-// placement on desktop; removed with the [gun] diagnostics before promotion.
 function isMobileView() {
-  const q = new URLSearchParams(window.location.search);
-  if (q.get('gunmobile') === '1') return true;
-  if (q.get('gundesktop') === '1') return false;
   return (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) ||
          Math.min(window.innerWidth, window.innerHeight) < 600;
 }
@@ -175,32 +170,16 @@ export function setupWeapon(camera, renderer) {
   const controllerGuns = [buildGunUnit(VR_MODEL_EULER), buildGunUnit(VR_MODEL_EULER)];
 
   // ── Load the GLB once, clone into every gun ──────────────────────────────────
-  console.log('[gun] loading GLB from', gunModelUrl);
   gltfLoader.load(
     gunModelUrl,
     (gltf) => {
-      // Diagnostics on the original (pre-scale) model.
-      const box = new THREE.Box3().setFromObject(gltf.scene);
-      const size = box.getSize(new THREE.Vector3());
-      const center = box.getCenter(new THREE.Vector3());
-      let meshCount = 0; const mats = new Set();
-      gltf.scene.traverse((o) => {
-        if (o.isMesh) { meshCount++; const m = o.material; (Array.isArray(m) ? m : [m]).forEach((x) => x && mats.add(x.type)); }
-      });
-      console.log('[gun] LOADED ✓ ' + JSON.stringify({
-        rawSize: [+size.x.toFixed(3), +size.y.toFixed(3), +size.z.toFixed(3)],
-        center: [+center.x.toFixed(3), +center.y.toFixed(3), +center.z.toFixed(3)],
-        meshCount, materials: [...mats], willScaleBy: MODEL_SCALE,
-      }));
-
       // Camera gun gets the original; each controller gun gets a clone (clones
       // share geometry/materials by reference — cheap, and we never mutate them).
       cameraGun.setModel(gltf.scene);
       controllerGuns.forEach((g) => g.setModel(gltf.scene.clone(true)));
-      console.log('[gun] models attached: camera + 2 controllers');
     },
-    (p) => { if (p.total) console.log(`[gun] loading ${Math.round((p.loaded / p.total) * 100)}%`); },
-    (err) => console.error('[gun] LOAD FAILED ✗', err),
+    undefined,
+    (err) => console.warn('gun model failed to load', err),
   );
 
   // ── Camera gun: child of the camera (flat/mobile) ─────────────────────────────

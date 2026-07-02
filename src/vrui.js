@@ -113,7 +113,7 @@ export function setupVrUI(scene, camera, renderer) {
     const cam = renderer.xr.getCamera();
     cam.getWorldPosition(_camPos);
     cam.getWorldQuaternion(_camQuat);
-    // Reticle + debug are CAMERA CHILDREN — they track the head automatically, no
+    // The reticle is a CAMERA CHILD — it tracks the head automatically, no
     // head-lock math needed. (panel/score/timer remain scene objects, head-locked.)
     if (panel.visible)            headLock(panel, PANEL_OFFSET);
     headLock(scoreSprite.mesh, SCORE_OFFSET);
