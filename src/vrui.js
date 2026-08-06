@@ -94,13 +94,17 @@ export function setupVrUI(scene, camera, renderer) {
     scoreSprite.mesh.visible = true;     // always in-session
     timerSprite.mesh.visible = rapid;    // only during rapid-fire
 
-    // ── Gaze crosshair (WebXR VR only; hidden in AR passthrough) ────────────────
-    // Shown in any immersive VR (opaque) session — covers the Android phone/
-    // Cardboard stereo view. (Quest is opaque too, so it shows there as well.)
+    // ── Gaze crosshair (Cardboard-style VR only) ────────────────────────────────
+    // Show ONLY in an immersive VR (opaque) session with NO tracked-pointer
+    // controllers — i.e. gaze/Cardboard input on Android. Hidden on Quest (tracked
+    // controllers aim directly), in AR passthrough, and in flat.
     const session = renderer.xr.getSession();
     const blend   = session && session.environmentBlendMode;
     const isAR    = !!(blend && blend !== 'opaque');
-    reticle.visible = !isAR;
+    const hasTrackedController = session
+      ? [...(session.inputSources || [])].some((s) => s.targetRayMode === 'tracked-pointer')
+      : false;
+    reticle.visible = !isAR && !hasTrackedController;
 
     // Text — repaint only when the value changes (cheap; protects 72fps).
     scoreSprite.setText(`SCORE ${getScore()}`);
