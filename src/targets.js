@@ -20,16 +20,15 @@ const MAX_TARGETS      = 12;
 const RESPAWN_DELAY_MS = 800;
 
 // ── Spawn modes ────────────────────────────────────────────────────────────────
-// Coins spawn differently depending on the play mode:
-//   vr          — big arena void, full 360° at arm's reach to far.
-//   quest-ar    — real room passthrough: full 360° but tighter so coins stay in-room.
-//   handheld-ar — phone "magic window": a forward-facing arc (player can't spin
-//                 360° comfortably) at a close radius.
+// Distance (rMin/rMax) and height (hMin/hMax) are the SAME across every mode, so
+// coins feel equally far in flat/SCREEN, VR, and AR. Modes differ ONLY in the
+// horizontal ARC: VR and Quest-AR use the full 360°; handheld phone AR uses a
+// forward-facing arc because you can't comfortably spin a phone around.
 // angleCenter/angleSpread define the horizontal arc; angle 0 = straight ahead (−Z).
 const SPAWN_MODES = {
-  'vr':          { rMin: 3,   rMax: 7,   hMin: 1.0, hMax: 3.0, angleCenter: 0, angleSpread: Math.PI * 2 },
-  'quest-ar':    { rMin: 1.5, rMax: 4,   hMin: 0.8, hMax: 2.5, angleCenter: 0, angleSpread: Math.PI * 2 },
-  'handheld-ar': { rMin: 1.0, rMax: 3,   hMin: 0.8, hMax: 2.2, angleCenter: 0, angleSpread: (120 * Math.PI) / 180 },
+  'vr':          { rMin: 3, rMax: 7, hMin: 1.0, hMax: 3.0, angleCenter: 0, angleSpread: Math.PI * 2 },
+  'quest-ar':    { rMin: 3, rMax: 7, hMin: 1.0, hMax: 3.0, angleCenter: 0, angleSpread: Math.PI * 2 },
+  'handheld-ar': { rMin: 3, rMax: 7, hMin: 1.0, hMax: 3.0, angleCenter: 0, angleSpread: (120 * Math.PI) / 180 },
 };
 
 // Active spawn config — defaults to VR. Switched at runtime by setSpawnMode().

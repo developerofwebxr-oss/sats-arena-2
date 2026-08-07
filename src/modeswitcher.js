@@ -46,9 +46,22 @@ export function createModeController(renderer) {
 
   // ── Mode switching — the reusable methods (DOM + future 3D both call these) ──
 
+  // End any active immersive session before starting a new one. WebXR won't run
+  // two immersive sessions at once, so requesting VR while AR is live (or vice
+  // versa) rejected — you had to exit to SCREEN first. Ending and AWAITING the
+  // current session lets AR↔VR switch in one step; the sessionend/sessionstart
+  // listeners (here + armode) handle each mode's teardown and setup.
+  async function endActiveSession() {
+    const current = renderer.xr.getSession();
+    if (current) {
+      try { await current.end(); } catch { /* already ending — ignore */ }
+    }
+  }
+
   async function enterVR() {
     if (state.vr.status !== 'supported') return;
     try {
+      await endActiveSession(); // leave AR (or any session) before entering VR
       const session = await navigator.xr.requestSession('immersive-vr', VR_INIT);
       await renderer.xr.setSession(session);
       // activeMode is set by the sessionstart listener below.
@@ -60,6 +73,7 @@ export function createModeController(renderer) {
   async function enterAR() {
     if (state.ar.status !== 'supported') return;
     try {
+      await endActiveSession(); // leave VR (or any session) before entering AR
       const session = await navigator.xr.requestSession('immersive-ar', AR_INIT);
       await renderer.xr.setSession(session);
     } catch (err) {
