@@ -122,10 +122,17 @@ export function createHUD(onShoot) {
   // Hidden unless active. Magenta to match the upgrade.
   const hud = document.createElement('div');
   hud.id = 'hud';
+  // Left HUD block (countdown / session code / score). Flex-column, vertically
+  // centred; its top+height are matched to the RAPID FIRE panel each layout so
+  // the two top corners stay balanced (see alignLeftBlockToPanel below).
   hud.style.cssText = `
     position: fixed;
     top: 16px;
     left: 16px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 4px;
     font-family: monospace;
     pointer-events: none;
     user-select: none;
@@ -149,9 +156,6 @@ export function createHUD(onShoot) {
   scoreEl = document.createElement('div');
   scoreEl.id = 'score';
   scoreEl.style.cssText = `
-    position: fixed;
-    top: 68px;
-    left: 16px;
     font-family: monospace;
     font-size: 16px;
     letter-spacing: 0.12em;
@@ -161,16 +165,12 @@ export function createHUD(onShoot) {
     user-select: none;
   `;
   scoreEl.textContent = 'SCORE 0';
-  document.body.appendChild(scoreEl);
 
   // ── Session code (top-left, under the countdown) ────────────────────────────
   // Shown so it can be read and typed into pay.html on another device.
   codeEl = document.createElement('div');
   codeEl.id = 'session-code';
   codeEl.style.cssText = `
-    position: fixed;
-    top: 44px;
-    left: 16px;
     font-family: monospace;
     font-size: 13px;
     letter-spacing: 0.18em;
@@ -180,7 +180,8 @@ export function createHUD(onShoot) {
     user-select: none;
     display: none;
   `;
-  document.body.appendChild(codeEl);
+  // Order top→bottom inside the left block: countdown, session code, score.
+  hud.append(codeEl, scoreEl);
 
   // ── Activate prompt (centre) — appears when a payment is banked ─────────────
   activatePrompt = document.createElement('button');
@@ -245,6 +246,33 @@ export function createHUD(onShoot) {
   if (!isLightningEnabled()) upgradeBtn.style.display = 'none';
 
   document.body.appendChild(upgradeBtn);
+
+  // ── Balance the left HUD block against the RAPID FIRE panel ──────────────────
+  // Match the left block's top + height to the panel's, so its vertically-centred
+  // contents line up with the panel's centre on every viewport (desktop + mobile,
+  // where the panel shifts up). Purely cosmetic positioning. Re-run on resize /
+  // orientation change. Falls back to the CSS top:16 when the panel is hidden.
+  const alignLeftBlockToPanel = () => {
+    const r = upgradeBtn.getBoundingClientRect();
+    if (r.height > 0) {                       // panel visible + laid out
+      hud.style.top = `${r.top}px`;
+      hud.style.height = `${r.height}px`;
+    } else {                                  // panel hidden (no Lightning) → default
+      hud.style.top = '16px';
+      hud.style.height = '';
+    }
+  };
+  // The panel can grow slightly after first paint (emoji/font metrics settle), so
+  // trigger the align from several signals to avoid racing that first layout.
+  // All are idempotent. A ResizeObserver catches the mobile breakpoint and any
+  // later size change; the resize listener catches viewport moves.
+  alignLeftBlockToPanel();
+  requestAnimationFrame(alignLeftBlockToPanel);
+  setTimeout(alignLeftBlockToPanel, 300);
+  window.addEventListener('load', alignLeftBlockToPanel);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(alignLeftBlockToPanel);
+  if (typeof ResizeObserver !== 'undefined') new ResizeObserver(alignLeftBlockToPanel).observe(upgradeBtn);
+  window.addEventListener('resize', alignLeftBlockToPanel);
 
   // ── On-screen SHOOT button (bottom-right) ───────────────────────────────────
   // For mouse-less / touch play. Fires through the centre crosshair — NDC (0,0) —
