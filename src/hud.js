@@ -550,6 +550,13 @@ export function activateCharge() {
   playReloadSound();
 }
 
+// Show/hide the flat DOM score. vrui.js drives this so exactly ONE score shows
+// per device: the DOM score for flat + handheld-phone AR, or the in-world 3D
+// score for headset VR/AR (never both). The score keeps updating while hidden.
+export function setHudScoreVisible(visible) {
+  if (scoreEl) scoreEl.style.display = visible ? '' : 'none';
+}
+
 // ── updateRapidFireHUD ──────────────────────────────────────────────────────
 // Called every frame from main.js. Shows/hides the countdown and toggles the
 // upgrade button's active glow. Only re-renders text when the second changes.

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { isRapidFire, getRemainingSeconds } from './upgrade.js';
-import { getAvailableCharges, activateCharge } from './hud.js';
+import { getAvailableCharges, activateCharge, setHudScoreVisible } from './hud.js';
+import { isHandheldAR } from './armode.js';
 import { getScore } from './score.js';
 
 /**
@@ -78,20 +79,27 @@ export function setupVrUI(scene, camera, renderer) {
   function updateVrUI() {
     const presenting = renderer.xr.isPresenting;
 
-    // Flat/handheld → DOM HUD handles it; hide all in-world UI.
+    // Flat → DOM HUD handles the score; hide all in-world UI.
     if (!presenting) {
       panel.visible = false;
       scoreSprite.mesh.visible = false;
       timerSprite.mesh.visible = false;
       reticle.visible = false;
+      setHudScoreVisible(true); // flat/SCREEN → DOM score in the top-left
       return;
     }
 
     const rapid = isRapidFire();
 
+    // Exactly ONE score per device. Headset VR/AR (no dom-overlay hand) → the
+    // in-world 3D score; handheld PHONE AR → the flat DOM score in the top-left.
+    // (Both an AR dom-overlay DOM score and the 3D score would otherwise stack.)
+    const handheld = isHandheldAR();
+    setHudScoreVisible(handheld);
+
     // Visibility.
     panel.visible = !rapid && getAvailableCharges() > 0;
-    scoreSprite.mesh.visible = true;     // always in-session
+    scoreSprite.mesh.visible = !handheld; // headset only; hidden on phone AR
     timerSprite.mesh.visible = rapid;    // only during rapid-fire
 
     // ── Gaze crosshair (Cardboard-style VR only) ────────────────────────────────
@@ -120,7 +128,7 @@ export function setupVrUI(scene, camera, renderer) {
     // The reticle is a CAMERA CHILD — it tracks the head automatically, no
     // head-lock math needed. (panel/score/timer remain scene objects, head-locked.)
     if (panel.visible)            headLock(panel, PANEL_OFFSET);
-    headLock(scoreSprite.mesh, SCORE_OFFSET);
+    if (scoreSprite.mesh.visible) headLock(scoreSprite.mesh, SCORE_OFFSET);
     if (timerSprite.mesh.visible) headLock(timerSprite.mesh, TIMER_OFFSET);
   }
 
